@@ -1,0 +1,194 @@
+From ca1ac958b91f7dfbed9715197da2686a6f96d1eb Mon Sep 17 00:00:00 2001
+From: Abhinav Gupta <abg@uber.com>
+Date: Tue, 8 Mar 2022 00:27:30 +0000
+Subject: [PATCH 1/3] stdliblist: Fix for Go 1.18 by replicating stdlib
+
+The stdliblist operation that the gopackagesdriver relies on fails on
+Go 1.18rc1 with the following error:
+
+```
+external/go_sdk/src/crypto/elliptic/p256_asm.go:24:12: pattern p256_asm_table.bin: cannot embed irregular file p256_asm_table.bin
+```
+
+We see this failure because Bazel builds a symlink tree of the GOROOT run
+`go list` with. However, since [CL 380475][1], the Go standard library uses
+`go:embed` to embed a file in `crypto/elliptic`, but `go:embed` does not
+support symlinks.
+
+[1]: https://go.dev/cl/380475
+
+Fix this by having stdliblist copy the relevant portions of the GOROOT to
+run `go list` with. This matches [what the stdlib action does][2].
+
+[2]: https://github.com/bazelbuild/rules_go/blob/e9a7054ff11a520e3b8aceb76a3ba44bb8da4c94/go/tools/builders/stdlib.go#L54-L57
+
+Resolves #3080
+---
+ go/tools/builders/stdliblist.go | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/go/tools/builders/stdliblist.go b/go/tools/builders/stdliblist.go
+index ec7e3161ae..8d26fa6146 100644
+--- a/go/tools/builders/stdliblist.go
++++ b/go/tools/builders/stdliblist.go
+@@ -158,19 +158,22 @@ func stdliblist(args []string) error {
+ 		return err
+ 	}
+
++	execRoot := abs(".")
++	if err := replicate(os.Getenv("GOROOT"), execRoot, replicatePaths("src", "pkg/tool", "pkg/include")); err != nil {
++		return err
++	}
++
+ 	// Ensure paths are absolute.
+ 	absPaths := []string{}
+ 	for _, path := range filepath.SplitList(os.Getenv("PATH")) {
+ 		absPaths = append(absPaths, abs(path))
+ 	}
+ 	os.Setenv("PATH", strings.Join(absPaths, string(os.PathListSeparator)))
+-	os.Setenv("GOROOT", abs(os.Getenv("GOROOT")))
++	os.Setenv("GOROOT", execRoot)
+ 	// Make sure we have an absolute path to the C compiler.
+ 	// TODO(#1357): also take absolute paths of includes and other paths in flags.
+ 	os.Setenv("CC", abs(os.Getenv("CC")))
+
+-	execRoot := abs(".")
+-
+ 	cachePath := abs(*out + ".gocache")
+ 	defer os.RemoveAll(cachePath)
+ 	os.Setenv("GOCACHE", cachePath)
+
+From c6a2b7c8eb4173b1a049430456fe5f8f63d43de4 Mon Sep 17 00:00:00 2001
+From: Abhinav Gupta <abg@uber.com>
+Date: Tue, 8 Mar 2022 17:18:16 +0000
+Subject: [PATCH 2/3] test/stdlib: Depend on _list_json
+
+Add a dependency on `GoStdLib._list_json` to the stdlib test.
+This ensures that we can successfully build the JSON data needed by the
+gopackagesdriver.
+---
+ tests/core/stdlib/stdlib_files.bzl | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/tests/core/stdlib/stdlib_files.bzl b/tests/core/stdlib/stdlib_files.bzl
+index 6ef6943d01..080c1c3ca5 100644
+--- a/tests/core/stdlib/stdlib_files.bzl
++++ b/tests/core/stdlib/stdlib_files.bzl
+@@ -27,10 +27,11 @@ pure_transition = transition(
+ def _stdlib_files_impl(ctx):
+     # When a transition is used, ctx.attr._stdlib is a list of Target instead
+     # of a Target. Possibly a bug?
+-    libs = ctx.attr._stdlib[0][GoStdLib].libs
++    stdlib = ctx.attr._stdlib[0][GoStdLib]
++    libs = stdlib.libs
+     runfiles = ctx.runfiles(files = libs)
+     return [DefaultInfo(
+-        files = depset(libs),
++        files = depset(libs + [stdlib._list_json]),
+         runfiles = runfiles,
+     )]
+
+
+From 56bc90ca2ac12c39f881094ccc5722bdc6118116 Mon Sep 17 00:00:00 2001
+From: Abhinav Gupta <abg@uber.com>
+Date: Tue, 8 Mar 2022 21:45:20 +0000
+Subject: [PATCH 3/3] Fix file paths relative to OUTPUT_BASE
+
+The prior version of this fix was incomplete because it generated
+incorrect relative paths.
+
+For example, before a path would be:
+
+    __BAZEL_OUTPUT_BASE__/external/go_sdk/src/archive/tar/common.go
+
+But with the prior version of this change.
+
+    __BAZEL_OUTPUT_BASE__/src/archive/tar/common.go
+
+It would drop the external/go_sdk from the path because the flattening
+logic in stdliblist makes these relative to the execRoot.
+
+We cannot overwrite external/go_sdk in execRoot because that's a path
+controlled by Bazel.
+
+Instead, create a parallel external/go_sdk under a new directory "root",
+and flatten paths relative to that.
+---
+ go/tools/builders/stdliblist.go | 43 ++++++++++++++++++++++++++++++---
+ 1 file changed, 40 insertions(+), 3 deletions(-)
+
+diff --git a/go/tools/builders/stdliblist.go b/go/tools/builders/stdliblist.go
+index 8d26fa6146..7298eea969 100644
+--- a/go/tools/builders/stdliblist.go
++++ b/go/tools/builders/stdliblist.go
+@@ -18,6 +18,7 @@ import (
+ 	"bytes"
+ 	"encoding/json"
+ 	"flag"
++	"fmt"
+ 	"go/build"
+ 	"os"
+ 	"path/filepath"
+@@ -145,6 +146,42 @@ func flatPackageForStd(execRoot string, pkg *goListPackage) *flatPackage {
+ 	return newPkg
+ }
+
++// In Go 1.18, the standard library started using go:embed directives.
++// When Bazel runs this action, it does so inside a sandbox where GOROOT points
++// to an external/go_sdk directory that contains a symlink farm of all files in
++// the Go SDK.
++// If we run "go list" with that GOROOT, this action will fail because those
++// go:embed directives will refuse to include the symlinks in the sandbox.
++//
++// To work around this, cloneRoot creates a copy of external/go_sdk into a new
++// directory "root" while retaining its path relative to the root directory.
++// So "$OUTPUT_BASE/external/go_sdk" becomes
++// "$OUTPUT_BASE/root/external/go_sdk".
++// This ensures that file paths in the generated JSON are still valid.
++//
++// cloneRoot returns the new root directory and the new GOROOT we should run
++// under.
++func cloneRoot(execRoot, goroot string) (newRoot string, newGoroot string, err error) {
++	relativeGoroot, err := filepath.Rel(abs(execRoot), abs(goroot))
++	if err != nil {
++		// GOROOT has to be a subdirectory of execRoot.
++		// Otherwise we're breaking the sandbox.
++		return "", "", fmt.Errorf("GOROOT %q is not relative to execution root %q: %v", goroot, execRoot)
++	}
++
++	newRoot = filepath.Join(execRoot, "root")
++	newGoroot = filepath.Join(newRoot, relativeGoroot)
++	if err := os.MkdirAll(newGoroot, 01755); err != nil {
++		return "", "", err
++	}
++
++	if err := replicate(goroot, newGoroot, replicatePaths("src", "pkg/tool", "pkg/include")); err != nil {
++		return "", "", err
++	}
++
++	return newRoot, newGoroot, nil
++}
++
+ // stdliblist runs `go list -json` on the standard library and saves it to a file.
+ func stdliblist(args []string) error {
+ 	// process the args
+@@ -158,8 +195,8 @@ func stdliblist(args []string) error {
+ 		return err
+ 	}
+
+-	execRoot := abs(".")
+-	if err := replicate(os.Getenv("GOROOT"), execRoot, replicatePaths("src", "pkg/tool", "pkg/include")); err != nil {
++	execRoot, goroot, err := cloneRoot(".", os.Getenv("GOROOT"))
++	if err != nil {
+ 		return err
+ 	}
+
+@@ -169,7 +206,7 @@ func stdliblist(args []string) error {
+ 		absPaths = append(absPaths, abs(path))
+ 	}
+ 	os.Setenv("PATH", strings.Join(absPaths, string(os.PathListSeparator)))
+-	os.Setenv("GOROOT", execRoot)
++	os.Setenv("GOROOT", goroot)
+ 	// Make sure we have an absolute path to the C compiler.
+ 	// TODO(#1357): also take absolute paths of includes and other paths in flags.
+ 	os.Setenv("CC", abs(os.Getenv("CC")))

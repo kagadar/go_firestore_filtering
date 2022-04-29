@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "filterstore",
+    srcs = ["filterstore.go"],
+    importpath = "github.com/kagadar/go_firetore_filtering/filterstore",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_iancoleman_strcase//:strcase",
+        "@com_github_kagadar_go_proto_expression//protoexpr",
+        "@com_github_kagadar_go_proto_expression//genproto/options",
+        "@com_google_cloud_go_firestore//:firestore",
+        "@go_googleapis//google/api/expr/v1alpha1:expr_go_proto",
+        "@org_golang_google_grpc//codes:go_default_library",
+        "@org_golang_google_grpc//status:go_default_library",
+        "@org_golang_google_protobuf//encoding/protowire",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@tech_einride_go_aip//filtering",
+    ],
+)
