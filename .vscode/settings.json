@@ -3,7 +3,7 @@
     "bazel-*/": true,
   },
   "go.toolsManagement.autoUpdate": true,
-  "go.goroot": "${workspaceFolder}/bazel-go_proto_expression/external/go_sdk",
+  "go.goroot": "${workspaceFolder}/bazel-go_firestore_filtering/external/go_sdk",
   "go.toolsEnvVars": {
     "GOPACKAGESDRIVER": "${workspaceFolder}/tools/gopackagesdriver.sh"
   },
@@ -13,7 +13,7 @@
   },
   "gopls": {
     "formatting.gofumpt": true,
-    "formatting.local": "github.com/kagadar/go_proto_expression",
+    "formatting.local": "github.com/kagadar/go_firestore_filtering",
     "ui.completion.usePlaceholders": true,
     "ui.semanticTokens": true,
     "ui.codelenses": {

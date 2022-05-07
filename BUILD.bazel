@@ -11,6 +11,7 @@ exports_files(["LICENSE"])
 # gazelle:go_naming_convention import
 # gazelle:go_naming_convention_external import
 # gazelle:prefix github.com/kagadar/go_firestore_filtering
+# gazelle:resolve go github.com/kagadar/go_proto_expression/genproto/options @com_github_kagadar_go_proto_expression//genproto/options
 gazelle(name = "gazelle")
 
 nogo(

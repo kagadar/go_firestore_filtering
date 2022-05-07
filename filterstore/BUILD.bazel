@@ -7,8 +7,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_iancoleman_strcase//:strcase",
-        "@com_github_kagadar_go_proto_expression//protoexpr",
         "@com_github_kagadar_go_proto_expression//genproto/options",
+        "@com_github_kagadar_go_proto_expression//protoexpr",
         "@com_google_cloud_go_firestore//:firestore",
         "@go_googleapis//google/api/expr/v1alpha1:expr_go_proto",
         "@org_golang_google_grpc//codes",
