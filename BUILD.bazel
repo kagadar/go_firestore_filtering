@@ -8,7 +8,9 @@ licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
 
-# gazelle:prefix github.com/kagadar/go_firetore_filtering
+# gazelle:go_naming_convention import
+# gazelle:go_naming_convention_external import
+# gazelle:prefix github.com/kagadar/go_firestore_filtering
 gazelle(name = "gazelle")
 
 nogo(

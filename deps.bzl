@@ -1,9 +1,6 @@
 load("@bazel_gazelle//:deps.bzl", "go_repository")
-load("@com_github_kagadar_go_proto_expression//:deps.bzl", protoexpr_deps = "go_dependencies")
 
 def go_dependencies():
-    protoexpr_deps()
-
     go_repository(
         name = "com_github_golang_groupcache",
         importpath = "github.com/golang/groupcache",
@@ -52,6 +49,7 @@ def go_dependencies():
         sum = "h1:ExR2D+5TYIrMphWgs5JCgwRhEDlPDXXrLwHHMgPHTXE=",
         version = "v0.74.0",
     )
+
     go_repository(
         name = "org_golang_google_grpc",
         build_file_proto_mode = "disable",

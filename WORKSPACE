@@ -39,12 +39,6 @@ load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
 protobuf_deps()
 
-git_repository(
-    name = "com_github_kagadar_go_proto_expression",
-    branch = "main",
-    remote = "https://github.com/kagadar/go_proto_expression",
-)
-
 http_archive(
     name = "bazel_gazelle",
     sha256 = "de69a09dc70417580aabf20a28619bb3ef60d038470c7cf8442fafcf627c21cb",
@@ -53,6 +47,16 @@ http_archive(
         "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.24.0/bazel-gazelle-v0.24.0.tar.gz",
     ],
 )
+
+git_repository(
+    name = "com_github_kagadar_go_proto_expression",
+    branch = "main",
+    remote = "https://github.com/kagadar/go_proto_expression",
+)
+
+load("@com_github_kagadar_go_proto_expression//:deps.bzl", protoexpr_deps = "go_dependencies")
+
+protoexpr_deps()
 
 load("//:deps.bzl", "go_dependencies")
 
