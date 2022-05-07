@@ -22,6 +22,7 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"github.com/iancoleman/strcase"
+	"github.com/kagadar/go_proto_expression/protoexpr"
 	"go.einride.tech/aip/filtering"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -29,11 +30,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/kagadar/go_proto_expression/protoexpr"
-
-	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
-
 	opb "github.com/kagadar/go_proto_expression/genproto/options"
+	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 )
 
 // AIP-132 & AIP-160 compliant List Request.
