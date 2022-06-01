@@ -36,9 +36,9 @@ type transpiler[T proto.Message] struct {
 	client *firestore.Client
 }
 
-func (t transpiler[T]) Transpile(ctx context.Context, factory func() T, parent, collection, pageToken string, pageSize int32, filter filtering.Filter) ([]T, string, error) {
-	q := &query{q: t.client.Collection(fmt.Sprintf("%s/%s", parent, collection)).Limit(int(pageSize)), types: filter.CheckedExpr.GetTypeMap()}
-	if err := q.transpile(filter.CheckedExpr.GetExpr(), false); err != nil {
+func (t transpiler[T]) Transpile(ctx context.Context, factory func() T, parent, collection, pageToken string, pageSize int32, filter *expr.CheckedExpr) ([]T, string, error) {
+	q := &query{q: t.client.Collection(fmt.Sprintf("%s/%s", parent, collection)).Limit(int(pageSize)), types: filter.GetTypeMap()}
+	if err := q.transpile(filter.GetExpr(), false); err != nil {
 		return nil, "", err
 	}
 	if pageToken != "" {
